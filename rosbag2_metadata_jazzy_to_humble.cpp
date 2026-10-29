@@ -75,6 +75,41 @@ int main() {
     // Catch line that needs to be changed
     if (in_line == target_line) {
 
+      // Peek next line: jazzy may use the short empty-list form, where the line
+      // after 'offered_qos_profiles:' is just '  []', instead of the expanded
+      // multi-field block. Handle it without touching the existing
+      // expanded-block behavior below.
+      std::streampos pos_before_peek = yaml_file_in.tellg();
+      std::string peek_empty_list;
+      bool is_empty_list = false;
+      if (std::getline(yaml_file_in, peek_empty_list)) {
+        std::string trimmed = peek_empty_list;
+        size_t first_non_space = trimmed.find_first_not_of(' ');
+        if (first_non_space != std::string::npos && trimmed.substr(first_non_space) == "[]") {
+          is_empty_list = true;
+        }
+      }
+
+      if (is_empty_list) {
+        // Write humble-style empty QoS profiles line
+        yaml_file_out << target_line << " \"\"\n";
+
+        // Remove the following 'type_description_hash:' line (humble doesn't have it)
+        std::string next_line;
+        if (std::getline(yaml_file_in, next_line)) {
+          if (next_line.find("type_description_hash:") == std::string::npos) {
+            yaml_file_out << next_line << "\n";
+          }
+        }
+
+        continue;
+      }
+
+      // Not an empty list: rewind to re-read the peeked line as part of the
+      // expanded-block parsing below, preserving current behavior exactly.
+      yaml_file_in.clear();
+      yaml_file_in.seekg(pos_before_peek);
+
       std::string new_target_line = target_line + start_options; // 'humble' yaml file line
 
       // 'history:' option
